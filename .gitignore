@@ -1,0 +1,44 @@
+# Python cache & virtualenv
+__pycache__/
+*.py[cod]
+*.so
+*.pyd
+*.pyo
+venv/
+*.egg-info/
+*.egg
+*.log
+
+# Vector database files
+*.db
+*.sqlite
+*.sqlite3
+
+# OS & editor files
+.DS_Store
+.vscode/
+.idea/
+
+# LangChain-related
+faiss_index/
+*.faiss
+*.pkl
+
+# Data & archive
+data/
+archive/
+main_archive/
+*.pdf
+
+# Secrets & configs
+.env
+.env.*
+
+# Logs
+logs/
+*.log
+
+# Build/Dist
+dist/
+build/
+document_portal.egg-info/

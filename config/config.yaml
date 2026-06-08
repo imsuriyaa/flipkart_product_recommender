@@ -1,0 +1,36 @@
+faiss_db:
+  collection_name: "document_chat"
+
+
+embedding_model:
+  google:
+    provider: "google"
+    model_name: "models/gemini-embedding-001"
+  openai:
+    provider: "openai"
+    model_name: "text-embedding-3-small"
+  huggingface:
+    provider: "huggingface"
+    model_name: "sentence-transformers/all-MiniLM-L6-v2"
+
+retriever:
+  top_k: 10
+
+llm:
+  groq:
+    provider: "groq"
+    model_name: "openai/gpt-oss-120b"
+    temperature: 0
+    max_output_tokens: 2048
+
+  google:
+    provider: "google"
+    model_name: "gemini-2.0-flash"
+    temperature: 0
+    max_output_tokens: 2048
+
+  openai:
+    provider: "openai"
+    model_name: "gpt-4o-mini"
+    temperature: 0
+    max_output_tokens: 2048
