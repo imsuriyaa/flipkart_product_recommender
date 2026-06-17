@@ -17,3 +17,8 @@ langchain-mcp-adapters
 mcp
 ddgs
 langchain-openai
+faiss-cpu
+langchain-community
+langchain-huggingface
+sentence-transformers
+langchain-chroma

@@ -1,5 +1,6 @@
 faiss_db:
   collection_name: "document_chat"
+  index_path: "faiss_index"
 
 
 embedding_model:
