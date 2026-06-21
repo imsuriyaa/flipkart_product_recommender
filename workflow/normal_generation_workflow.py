@@ -35,8 +35,7 @@ def build_chain(query):
     retriever = retriever_obj.load_retriever()
     retrieved_docs=retriever.invoke(query)
     
-    retrieved_contexts = [format_docs(retrieved_docs)]
-    
+    retrieved_contexts = format_docs(retrieved_docs)
     llm = model_loader.load_llm()
     prompt = ChatPromptTemplate.from_template(
         PROMPT_REGISTRY[PromptType.PRODUCT_BOT].template
@@ -93,6 +92,8 @@ if __name__=='__main__':
     # retrieved_contexts = [_format_docs(doc) for doc in retrieved_docs]
     
     retrieved_contexts,response = invoke_chain(user_query)
+
+    print(response)
     
     #this is not an actual output this have been written to test the pipeline
     #response="iphone 16 plus, iphone 16, iphone 15 are best phones under 1,00,000 INR."

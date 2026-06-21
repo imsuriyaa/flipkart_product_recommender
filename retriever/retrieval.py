@@ -99,7 +99,9 @@ if __name__=='__main__':
     #         formatted_chunks.append(formatted)
     #     return "\n\n---\n\n".join(formatted_chunks)
 
-    log.info("Retrieved Contexts:", len(retrieved_docs))
+    log.info("Retrieved Contexts:", count = len(retrieved_docs))
+
+    log.info("Retrieved Contexts:", retrieved_content = [ctx for ctx in retrieved_contexts])
     
     #this is not an actual output this have been written to test the pipeline
     response="iphone 16 plus, iphone 16, iphone 15 are best phones under 1,00,000 INR."
@@ -107,7 +109,7 @@ if __name__=='__main__':
     # context_score = evaluate_context_precision(user_query,response,retrieved_contexts)
     # relevancy_score = evaluate_response_relevancy(user_query,response,retrieved_contexts)
     
-    print("\n--- Evaluation Metrics ---")
+    # print("\n--- Evaluation Metrics ---")
     # print("Context Precision Score:", context_score)
     # print("Response Relevancy Score:", relevancy_score)
     
