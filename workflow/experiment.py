@@ -9,6 +9,10 @@ from retriever.retrieval import Retriever
 from utils.model_loader import ModelLoader
 from langgraph.checkpoint.memory import MemorySaver
 import asyncio
+from langchain_community.chat_message_histories import ChatMessageHistory
+from langchain_core.chat_history import BaseChatMessageHistory
+from langchain_classic.chains import create_history_aware_retriever
+from langchain_classic import hub
 
 
 class AgenticRAG:
@@ -16,11 +20,16 @@ class AgenticRAG:
 
     class AgentState(TypedDict):
         messages: Annotated[Sequence[BaseMessage], add_messages]
-        query: str
+
+        query: str                 # Original user query
+
+        standalone_query: str      # Query after history rewriting
+
         documents: list
+
         context: str
+
         route: Literal["retriever", "chat"] | None
-        history: list
 
     def __init__(self):
         self.retriever_obj = Retriever()
@@ -75,6 +84,37 @@ class AgenticRAG:
             'route': END,
             "messages": [AIMessage(content=response)]
         }
+
+    def _history_rewrite(self, state: AgentState):
+        history = []
+
+        for message in state["messages"][:-1]:
+
+            if isinstance(message, HumanMessage):
+                history.append(f"User: {message.content}")
+
+            elif isinstance(message, AIMessage):
+                history.append(f"Assistant: {message.content}")
+
+        history = "\n".join(history)
+
+        current_question = state["messages"][-1].content
+
+        prompt = ChatPromptTemplate.from_template(...)
+
+        chain = prompt | self.llm | StrOutputParser()
+
+        standalone = chain.invoke(
+            {
+                "history": history,
+                "question": current_question,
+            }
+        )
+
+        return {
+            "standalone_query": standalone
+        }
+
 
 
     def _vector_retriever(self, state: AgentState):

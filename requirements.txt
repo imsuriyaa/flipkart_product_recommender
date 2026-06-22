@@ -23,3 +23,4 @@ langchain-huggingface
 sentence-transformers
 langchain-chroma
 langchain-google-vertexai
+langchain-classic
