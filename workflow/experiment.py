@@ -120,8 +120,7 @@ class AgenticRAG:
     def _vector_retriever(self, state: AgentState):
         
         print("--- RETRIEVER ---")
-        print("Current query:", state)
-        query = state["query"]
+        query = state["standalone_query"]
         retriever = self.retriever_obj.load_retriever()
         docs = retriever.invoke(query)
         context = self._format_docs(docs)
@@ -150,7 +149,7 @@ class AgenticRAG:
     def _generate(self, state: AgentState):
         print("--- GENERATE ---")
         print("Current query:", state)
-        question = state["query"]
+        question = state["standalone_query"]
         docs = state["context"]
         prompt = ChatPromptTemplate.from_template(
             PROMPT_REGISTRY[PromptType.PRODUCT_BOT].template
@@ -174,6 +173,7 @@ class AgenticRAG:
     def _build_workflow(self):
         workflow = StateGraph(self.AgentState)
         workflow.add_node("Assistant", self._ai_assistant)
+        workflow.add_node("HistoryRewrite", self._history_rewrite)
         workflow.add_node("Retriever", self._vector_retriever)
         workflow.add_node("Generator", self._generate)
         workflow.add_node("Rewriter", self._rewrite)
@@ -187,8 +187,9 @@ class AgenticRAG:
         workflow.add_conditional_edges(
             "Assistant",
             lambda state: state["route"],
-            {"retriever": "Retriever", END: END},
+            {"retriever": "HistoryRewrite", END: END},
         )
+        workflow.add_edge("HistoryRewrite", "Retriever")
         workflow.add_conditional_edges(
             "Retriever",
             self._grade_documents,
