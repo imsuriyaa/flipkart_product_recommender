@@ -5,6 +5,8 @@ import string
 
 class PromptType(str, Enum):
     PRODUCT_BOT = "product_bot"
+    REWRITE_QUESTION_WITH_HISTORY = "rewrite_question_with_history"
+    DETERMINISTIC_BOT = "deterministic_bot"
     # REVIEW_BOT = "review_bot"
     # COMPARISON_BOT = "comparison_bot"
 
@@ -45,4 +47,31 @@ PROMPT_REGISTRY: Dict[PromptType, PromptTemplate] = {
         """,
         description="Handles ecommerce QnA & product recommendation flows"
     )
+
+    PromptType.REWRITE_QUESTION_WITH_HISTORY: PromptTemplate(
+        """
+        Given the conversation history and the latest user question,
+        rewrite the latest question so it is completely self-contained.
+
+        Do NOT answer the question.
+
+        Latest question:
+        {question}
+
+        Standalone question:
+        """
+    )
+
+    PromptType.DETERMINISTIC_BOT: PromptTemplate(
+        """
+        You have been provided with a set of product titles, ratings, and reviews. Your task is to determine whether the question is relevant to the provided data. Return ONLY YES or NO"
+
+        Question: {question}
+
+        if docs provided is not empty utilize it to determine the relevance of the question. If docs is empty go ahead with prompt in hand
+        Product Data: {docs}
+        """
+    )
+
+
 }

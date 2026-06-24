@@ -1,6 +1,6 @@
 from typing import Annotated, Sequence, TypedDict, Literal
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
-from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, PromptTemplate, MessagesPlaceholder
 from langchain_core.output_parsers import StrOutputParser
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
@@ -20,15 +20,11 @@ class AgenticRAG:
 
     class AgentState(TypedDict):
         messages: Annotated[Sequence[BaseMessage], add_messages]
-
         query: str                 # Original user query
-
         standalone_query: str      # Query after history rewriting
-
         documents: list
-
         context: str
-
+        retry_count: int
         route: Literal["retriever", "chat"] | None
 
     def __init__(self):
@@ -38,7 +34,6 @@ class AgenticRAG:
         self.checkpointer = MemorySaver()
         self.workflow = self._build_workflow()
         self.app = self.workflow.compile(checkpointer=self.checkpointer)
-        self.history_store = {}
 
     # ---------- Helpers ----------
     def _format_docs(self, docs) -> str:
@@ -56,19 +51,28 @@ class AgenticRAG:
             formatted_chunks.append(formatted)
         return "\n\n---\n\n".join(formatted_chunks)
 
-    def _get_history(self,session_id:str) -> BaseChatMessageHistory:
-        if session_id not in self.history_store:
-            self.history_store[session_id] = ChatMessageHistory()
-        return self.history_store[session_id]
+    # def _get_history(self,session_id:str) -> BaseChatMessageHistory:
+    #     if session_id not in self.history_store:
+    #         self.history_store[session_id] = ChatMessageHistory()
+        # return self.history_store[session_id]
 
     # ---------- Nodes ----------
     def _ai_assistant(self, state: AgentState):
         print("--- CALL ASSISTANT ---")
-        print("Current query:", state)
+        retry_count = state.get("retry_count", 0)
+        if retry_count > 2:
+            return {
+                "messages": [AIMessage(content="I'm sorry, I couldn't find relevant information to answer your question.")],
+                "route": END
+            }
         messages = state["messages"]
         last_message = messages[-1].content
 
-        if any(word in last_message.lower() for word in ["price", "review", "product"]):
+        determine_prompt = PROMPT_REGISTRY[PromptType.DETERMINISTIC_BOT].template
+        determine_chain = ChatPromptTemplate.from_template(determine_prompt) | self.llm | StrOutputParser()
+        relevance = determine_chain.invoke({"question": last_message, "docs": state.get("context", "")})
+
+        if relevance.strip().lower() == "yes":
             return {
                 "query": last_message,
                 "route": "retriever"
@@ -86,27 +90,28 @@ class AgenticRAG:
         }
 
     def _history_rewrite(self, state: AgentState):
-        history = []
-
-        for message in state["messages"][:-1]:
-
-            if isinstance(message, HumanMessage):
-                history.append(f"User: {message.content}")
-
-            elif isinstance(message, AIMessage):
-                history.append(f"Assistant: {message.content}")
-
-        history = "\n".join(history)
+        print("--- REWRITE QUESTION WITH HISTORY ---")
 
         current_question = state["messages"][-1].content
 
-        prompt = ChatPromptTemplate.from_template(...)
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                (
+                    "system",
+                    PROMPT_REGISTRY[
+                        PromptType.REWRITE_QUESTION_WITH_HISTORY
+                    ].template
+                ),
+                MessagesPlaceholder("history"),
+                ("human", "{question}")
+            ]
+        )
 
         chain = prompt | self.llm | StrOutputParser()
 
         standalone = chain.invoke(
             {
-                "history": history,
+                "history": state["messages"][:-1],
                 "question": current_question,
             }
         )
@@ -122,6 +127,22 @@ class AgenticRAG:
         print("--- RETRIEVER ---")
         query = state["standalone_query"]
         retriever = self.retriever_obj.load_retriever()
+
+        # rephrase_prompt = ChatPromptTemplate.from_template(
+        #     PROMPT_REGISTRY[PromptType.REWRITE_QUESTION_WITH_HISTORY].template
+        # )
+
+        # history_retriever = create_history_aware_retriever(
+        #     self.llm,
+        #     retriever,
+        #     rephrase_prompt,
+        # )
+
+        # docs = history_retriever.invoke({
+        #     "chat_history": state["messages"][:-1],
+        #     "input": state["messages"][-1].content,
+        # })
+
         docs = retriever.invoke(query)
         context = self._format_docs(docs)
         return {
@@ -155,7 +176,7 @@ class AgenticRAG:
             PROMPT_REGISTRY[PromptType.PRODUCT_BOT].template
         )
         chain = prompt | self.llm | StrOutputParser()
-        response = chain.invoke({"context": docs, "question": question})
+        response = chain.invoke({"history": state["messages"], "context": docs, "question": question})
         return {"messages": [AIMessage(content=response)]}
 
 
@@ -164,9 +185,14 @@ class AgenticRAG:
         print("Current query:", state)
         question = state["query"]
         new_q = self.llm.invoke(
-            [AIMessage(content=f"Rewrite the query to be clearer: {question}")]
+            [HumanMessage(content=f"Rewrite the query to be clearer: {question}")]
         )
-        return {"query": [HumanMessage(content=new_q.content)]}
+        return {
+            "retry_count": state.get("retry_count", 0) + 1,
+            "messages": [HumanMessage(content=new_q.content)], 
+            "query": new_q.content,
+            "standalone_query": new_q.content,
+        }
 
 
     # ---------- Build Workflow ----------
@@ -182,7 +208,7 @@ class AgenticRAG:
         # workflow.add_conditional_edges(
         #     "Assistant",
         #     lambda state: "Retriever" if state["route"] == "retriever" else END,
-        #     {"Retriever": "Retriever", END: END},
+        #     {"Retriever": "Retriever", "generator": "Generator",  END: END},
         # )
         workflow.add_conditional_edges(
             "Assistant",
@@ -202,8 +228,12 @@ class AgenticRAG:
     # ---------- Public Run ----------
     def run(self, query: str,thread_id: str = "default_thread") -> str:
         """Run the workflow for a given query and return the final answer."""
-        result = self.app.invoke({"messages": [HumanMessage(content=query)]},
-                                 config={"configurable": {"thread_id": thread_id}})
+        result = self.app.invoke({
+            "messages": [HumanMessage(content=query)],
+            "query": query,
+            "retry_count": 0
+        },
+        config={"configurable": {"thread_id": thread_id}})
         print("\n--- Workflow Result ---")
         print(result)
         print("\n--- Final Answer ---")
