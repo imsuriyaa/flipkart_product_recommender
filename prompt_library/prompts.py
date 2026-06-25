@@ -35,7 +35,7 @@ PROMPT_REGISTRY: Dict[PromptType, PromptTemplate] = {
     PromptType.PRODUCT_BOT: PromptTemplate(
         """
         You are an expert EcommerceBot specialized in product recommendations and handling customer queries.
-        Analyze the provided product titles, ratings, and reviews to provide accurate, helpful responses.
+        Analyze the provided product name, ratings, descriptions, and reviews to provide accurate, helpful responses.
         Stay relevant to the context, and keep your answers concise and informative.
 
         CONTEXT:
@@ -46,7 +46,7 @@ PROMPT_REGISTRY: Dict[PromptType, PromptTemplate] = {
         YOUR ANSWER:
         """,
         description="Handles ecommerce QnA & product recommendation flows"
-    )
+    ),
 
     PromptType.REWRITE_QUESTION_WITH_HISTORY: PromptTemplate(
         """
@@ -60,7 +60,7 @@ PROMPT_REGISTRY: Dict[PromptType, PromptTemplate] = {
 
         Standalone question:
         """
-    )
+    ),
 
     PromptType.DETERMINISTIC_BOT: PromptTemplate(
         """

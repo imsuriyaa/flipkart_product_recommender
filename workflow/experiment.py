@@ -8,11 +8,6 @@ from prompt_library.prompts import PROMPT_REGISTRY, PromptType
 from retriever.retrieval import Retriever
 from utils.model_loader import ModelLoader
 from langgraph.checkpoint.memory import MemorySaver
-import asyncio
-from langchain_community.chat_message_histories import ChatMessageHistory
-from langchain_core.chat_history import BaseChatMessageHistory
-from langchain_classic.chains import create_history_aware_retriever
-from langchain_classic import hub
 
 
 class AgenticRAG:
@@ -57,42 +52,52 @@ class AgenticRAG:
         # return self.history_store[session_id]
 
     # ---------- Nodes ----------
-    def _ai_assistant(self, state: AgentState):
-        print("--- CALL ASSISTANT ---")
-        retry_count = state.get("retry_count", 0)
-        if retry_count > 2:
-            return {
-                "messages": [AIMessage(content="I'm sorry, I couldn't find relevant information to answer your question.")],
-                "route": END
-            }
-        messages = state["messages"]
-        last_message = messages[-1].content
+    # def _ai_assistant(self, state: AgentState):
+    #     print("--- CALL ASSISTANT ---")
+    #     retry_count = state.get("retry_count", 0)
+    #     if retry_count > 2:
+    #         return {
+    #             "messages": [AIMessage(content="I'm sorry, I couldn't find relevant information to answer your question.")],
+    #             "route": END
+    #         }
+    #     messages = state["messages"]
+    #     last_message = messages[-1].content
 
-        determine_prompt = PROMPT_REGISTRY[PromptType.DETERMINISTIC_BOT].template
-        determine_chain = ChatPromptTemplate.from_template(determine_prompt) | self.llm | StrOutputParser()
-        relevance = determine_chain.invoke({"question": last_message, "docs": state.get("context", "")})
+    #     determine_prompt = PROMPT_REGISTRY[PromptType.DETERMINISTIC_BOT].template
+    #     determine_chain = ChatPromptTemplate.from_template(determine_prompt) | self.llm | StrOutputParser()
+    #     relevance = determine_chain.invoke({"question": last_message, "docs": state.get("context", "")})
 
-        if relevance.strip().lower() == "yes":
-            return {
-                "query": last_message,
-                "route": "retriever"
-            }
+    #     if "yes" in relevance.strip().lower():
+    #         return {
+    #             "query": last_message,
+    #             "route": "retriever"
+    #         }
         
-        prompt = ChatPromptTemplate.from_template(
-            "You are a helpful assistant. Answer the user directly.\n\nQuestion: {question}\nAnswer:"
-        )
-        chain = prompt | self.llm | StrOutputParser()
-        response = chain.invoke({"question": last_message})
+    #     prompt = ChatPromptTemplate.from_template(
+    #         "You are a helpful assistant. Answer the user directly.\n\nQuestion: {question}\nAnswer:"
+    #     )
+    #     chain = prompt | self.llm | StrOutputParser()
+    #     response = chain.invoke({"question": last_message})
+    #     return {
+    #         "query": last_message,
+    #         'route': END,
+    #         "messages": [AIMessage(content=response)]
+    #     }
+
+
+    def _ai_assistant(self, state):
         return {
-            "query": last_message,
-            'route': END,
-            "messages": [AIMessage(content=response)]
+            "query": state["messages"][-1].content,
+            "route": "retriever"
         }
 
     def _history_rewrite(self, state: AgentState):
-        print("--- REWRITE QUESTION WITH HISTORY ---")
+        print("\n========== HISTORY ==========")
+        for i, msg in enumerate(state["messages"][:-1]):
+            print(f"{i}. {type(msg).__name__}: {msg.content}")
 
-        current_question = state["messages"][-1].content
+        print("\nCurrent Question:")
+        print(state["messages"][-1].content)
 
         prompt = ChatPromptTemplate.from_messages(
             [
@@ -112,13 +117,48 @@ class AgenticRAG:
         standalone = chain.invoke(
             {
                 "history": state["messages"][:-1],
-                "question": current_question,
+                "question": state["messages"][-1].content,
             }
         )
+
+        print("\nRewritten Question:")
+        print(standalone)
+        print("=============================\n")
 
         return {
             "standalone_query": standalone
         }
+    
+    # def _history_rewrite(self, state: AgentState):
+    #     print("--- REWRITE QUESTION WITH HISTORY ---")
+
+    #     current_question = state["messages"][-1].content
+
+    #     prompt = ChatPromptTemplate.from_messages(
+    #         [
+    #             (
+    #                 "system",
+    #                 PROMPT_REGISTRY[
+    #                     PromptType.REWRITE_QUESTION_WITH_HISTORY
+    #                 ].template
+    #             ),
+    #             MessagesPlaceholder("history"),
+    #             ("human", "{question}")
+    #         ]
+    #     )
+
+    #     chain = prompt | self.llm | StrOutputParser()
+
+    #     standalone = chain.invoke(
+    #         {
+    #             "history": state["messages"][:-1],
+    #             "question": current_question,
+    #         }
+    #     )
+
+    #     return {
+    #         "standalone_query": standalone
+    #     }
 
 
 
@@ -154,7 +194,7 @@ class AgenticRAG:
     def _grade_documents(self, state: AgentState) -> Literal["generator", "rewriter"]:
         print("--- GRADER ---")
         print("Current query:", state)
-        question = state["query"]
+        question = state["standalone_query"]
         docs = state["context"]
 
         prompt = PromptTemplate(
@@ -172,11 +212,30 @@ class AgenticRAG:
         print("Current query:", state)
         question = state["standalone_query"]
         docs = state["context"]
-        prompt = ChatPromptTemplate.from_template(
-            PROMPT_REGISTRY[PromptType.PRODUCT_BOT].template
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                (
+                    "system",
+                    PROMPT_REGISTRY[PromptType.PRODUCT_BOT].template
+                ),
+                MessagesPlaceholder("history"),
+                (
+                    "human", """
+                    Context: {context}
+                    Question: {question}
+                    Answer:
+                    """
+                )
+            ]
         )
         chain = prompt | self.llm | StrOutputParser()
-        response = chain.invoke({"history": state["messages"], "context": docs, "question": question})
+        response = chain.invoke(
+            {
+                "history": state["messages"][:-1],
+                "context": docs,
+                "question": question,
+            }
+        )
         return {"messages": [AIMessage(content=response)]}
 
 
@@ -189,7 +248,6 @@ class AgenticRAG:
         )
         return {
             "retry_count": state.get("retry_count", 0) + 1,
-            "messages": [HumanMessage(content=new_q.content)], 
             "query": new_q.content,
             "standalone_query": new_q.content,
         }
@@ -251,9 +309,15 @@ class AgenticRAG:
 if __name__ == "__main__":
     
     
-    rag_agent = AgenticRAG()
-    answer = rag_agent.run("iphone 16 pro max prices?")
-    print("\nFinal Answer:\n", answer)
+    rag = AgenticRAG()
+    thread = "conversation_1"
+
+    response1 = rag.run("What is the price, specifications, and reviews for the iPhone 16 Pro Max?", thread)
+    print(response1)
+
+    response2 = rag.run("What is its price of 256GB variant?", thread)
+    print(response2)
+
     
     
     # retrieved_contexts,response = invoke_chain(user_query)
