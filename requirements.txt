@@ -24,3 +24,11 @@ sentence-transformers
 langchain-chroma
 langchain-google-vertexai
 langchain-classic
+
+fastapi 
+uvicorn 
+sqlalchemy 
+jinja2 
+python-multipart 
+passlib[bcrypt] 
+python-jose[cryptography]
