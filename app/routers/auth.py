@@ -41,18 +41,7 @@ templates = Jinja2Templates(directory=APP_DIR / "templates")
 
 # Pages
 
-@router.get('/login-page')
-async def login_page(request: Request):
-    if request.cookies.get('access_token'):
-        user = await get_current_user(request.cookies.get('access_token'))
-        if user:
-            return RedirectResponse(url="/chat", status_code=status.HTTP_302_FOUND)
-    return templates.TemplateResponse("login.html", {"request": request, 'title': 'FASTAPI LLM Chat - Login'})
 
-
-@router.get('/register-page')
-async def register_page(request: Request):
-    return templates.TemplateResponse("register.html", {"request": request, 'title': 'FASTAPI LLM Chat - Register'})
 
 # EndPoints
 

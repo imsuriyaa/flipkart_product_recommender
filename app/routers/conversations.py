@@ -1,17 +1,10 @@
 from typing import Annotated
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session, selectinload
-
-try:
-    from database import get_db
-    from models import Conversation, Message
-    from routers.auth import get_current_user
-except ModuleNotFoundError:
-    from app.database import get_db
-    from app.models import Conversation, Message
-    from app.routers.auth import get_current_user
+from app.database import get_db
+from app.models import Conversation, Message
+from app.routers.auth import get_current_user
 
 
 router = APIRouter(
@@ -127,28 +120,3 @@ def get_conversation(
         **_conversation_response(conversation).dict(),
         messages=[_message_response(message) for message in messages]
     )
-
-
-@router.patch("/{conversation_id}", response_model=ConversationResponse)
-def update_conversation(
-    conversation_id: int,
-    request: ConversationUpdate,
-    user: user_dependency,
-    db: db_dependency
-):
-    conversation = _conversation_or_404(db, conversation_id, user["id"])
-    conversation.title = request.title.strip()
-    db.commit()
-    db.refresh(conversation)
-    return _conversation_response(conversation)
-
-
-@router.delete("/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_conversation(
-    conversation_id: int,
-    user: user_dependency,
-    db: db_dependency
-):
-    conversation = _conversation_or_404(db, conversation_id, user["id"])
-    db.delete(conversation)
-    db.commit()

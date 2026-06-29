@@ -1,22 +1,19 @@
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
-
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
-
-try:
-    from database import get_db
-    from models import Conversation, Message
-    from routers.auth import get_current_user
-except ModuleNotFoundError:
-    from app.database import get_db
-    from app.models import Conversation, Message
-    from app.routers.auth import get_current_user
-
+from app.database import get_db
+from app.models import Conversation, Message
+from app.routers.auth import get_current_user
 from workflow.llm_chat import AgenticRAG
+from langchain_core.messages import (
+    HumanMessage,
+    AIMessage,
+    BaseMessage
+)
 
 
 router = APIRouter(
@@ -26,7 +23,6 @@ router = APIRouter(
 
 db_dependency = Annotated[Session, Depends(get_db)]
 user_dependency = Annotated[dict, Depends(get_current_user)]
-templates = Jinja2Templates(directory=Path(__file__).resolve().parents[2] / "templates")
 
 
 class ChatRequest(BaseModel):
@@ -34,12 +30,17 @@ class ChatRequest(BaseModel):
     conversation_id: int | None = None
     thread_id: str | None = None
 
-
 class ChatResponse(BaseModel):
     conversation_id: int
     thread_id: str
     user_message: str
     assistant_message: str
+
+class ConversationSummary(BaseModel):
+    id: int
+    thread_id: str
+    title: str
+    created_at: str
 
 
 @lru_cache(maxsize=1)
@@ -59,6 +60,7 @@ def _get_or_create_conversation(
     user_id: int,
     request: ChatRequest,
 ) -> Conversation:
+
     conversation = None
 
     if request.conversation_id is not None:
@@ -90,6 +92,25 @@ def _get_or_create_conversation(
     return conversation
 
 
+def _load_history(
+    db: Session,
+    conversation_id: int,
+) -> list[BaseMessage]:
+    messages = (
+        db.query(Message)
+        .filter(Message.conversation_id == conversation_id)
+        .order_by(Message.created_at.asc())
+        .all()
+    )
+    history = [
+        HumanMessage(content=msg.content)
+        if msg.role == "user"
+        else AIMessage(content=msg.content)
+        for msg in messages
+    ]
+    return history
+
+
 @router.post("", response_model=ChatResponse)
 def chat(
     request: ChatRequest,
@@ -97,7 +118,10 @@ def chat(
     db: db_dependency,
     chat_engine: Annotated[AgenticRAG, Depends(get_chat_engine)]
 ):
+    
     conversation = _get_or_create_conversation(db, user["id"], request)
+
+    history = _load_history(db, conversation.id)
 
     user_message = Message(
         conversation_id=conversation.id,
@@ -105,12 +129,12 @@ def chat(
         content=request.message
     )
     db.add(user_message)
-    db.commit()
-
+    
+    
     try:
         assistant_text = chat_engine.run(
             request.message,
-            thread_id=conversation.thread_id
+            history=history
         )
     except Exception as exc:
         db.rollback()
@@ -135,21 +159,31 @@ def chat(
     )
 
 
-@router.get("")
-def chat_page(request: Request):
-    return templates.TemplateResponse(
-        "chat.html",
-        {"request": request, "title": "FASTAPI LLM Chat"}
-    )
 
-
-@router.post("/get", response_model=str)
-def chat_form(
+@router.get("/conversations", response_model=list[ConversationSummary])
+def get_user_conversations(
     user: user_dependency,
     db: db_dependency,
-    chat_engine: Annotated[AgenticRAG, Depends(get_chat_engine)],
-    msg: str = Form(...)
 ):
-    request = ChatRequest(message=msg)
-    response = chat(request, user, db, chat_engine)
-    return response.assistant_message
+    conversations = (
+        db.query(Conversation)
+        .filter(Conversation.user_id == user["id"])
+        .order_by(Conversation.created_at.desc())
+        .all()
+    )
+
+    return [
+        ConversationSummary(
+            id=conversation.id,
+            thread_id=conversation.thread_id,
+            title=conversation.title,
+            created_at=conversation.created_at.isoformat(),
+        )
+        for conversation in conversations
+    ]
+
+
+
+
+
+

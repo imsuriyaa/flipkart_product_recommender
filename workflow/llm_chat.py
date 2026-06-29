@@ -20,7 +20,6 @@ from langgraph.graph import (
 )
 
 from langgraph.graph.message import add_messages
-from langgraph.checkpoint.memory import MemorySaver
 
 from utils.model_loader import ModelLoader
 
@@ -36,9 +35,8 @@ class AgenticRAG:
     def __init__(self):
         self.model_loader = ModelLoader()
         self.llm = self.model_loader.load_llm()
-        self.checkpointer = MemorySaver()
         self.workflow = self._build_workflow()
-        self.app = self.workflow.compile(checkpointer=self.checkpointer)
+        self.app = self.workflow.compile()
 
     def _history_aware_query(self, state: AgentState):
         """Generates a history-aware query based on the current state."""
@@ -127,13 +125,12 @@ class AgenticRAG:
         return workflow
 
 
-    def run(self, query: str,thread_id: str = "default_thread") -> str:
+    def run(self, query: str, history: list[BaseMessage] | None = None) -> str:
         """Run the workflow for a given query and return the final answer."""
         result = self.app.invoke({
-            "messages": [HumanMessage(content=query)],
+            "messages": history + [HumanMessage(content=query)],
             "query": query,
-        },
-        config={"configurable": {"thread_id": thread_id}})
+        })
         print("\n--- Workflow Result ---")
         print(result)
         print("\n--- Final Answer ---")

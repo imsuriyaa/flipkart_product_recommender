@@ -1,5 +1,5 @@
 import uuid
-from database import Base
+from app.database import Base
 from sqlalchemy import DateTime
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, ForeignKey
@@ -20,6 +20,7 @@ class User(Base):
         cascade="all, delete-orphan"
     )
 
+
 class Conversation(Base):
     __tablename__ = "conversations"
     id = Column(Integer, primary_key=True, index=True)
@@ -32,11 +33,13 @@ class Conversation(Base):
         "User",
         back_populates="conversations"
     )
+
     messages = relationship(
         "Message",
         back_populates="conversation",
         cascade="all, delete-orphan"
     )
+
 
 class Message(Base):
     __tablename__ = "messages"
