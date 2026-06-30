@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>LLM Chat</title>
+</head>
+
+<body>
+
+<h2>LLM Chat</h2>
+
+<button onclick="logout()">Logout</button>
+
+<hr>
+
+<div id="messages"></div>
+
+<hr>
+
+<h3>Your Conversations</h3>
+
+<div id="conversations"></div>
+
+<hr>
+
+<form id="chatForm">
+
+    <input
+        type="text"
+        id="message"
+        placeholder="Type your message"
+        autocomplete="off"
+    >
+
+    <button type="submit">
+        Send
+    </button>
+
+</form>
+
+<script>
+
+let conversation_id = null;
+
+function getCookie(name){
+
+    const cookies = document.cookie.split(";");
+
+    for(let cookie of cookies){
+
+        cookie = cookie.trim();
+
+        if(cookie.startsWith(name + "=")){
+            return cookie.substring(name.length + 1);
+        }
+
+    }
+
+    return null;
+}
+
+function logout(){
+
+    document.cookie =
+        "access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+
+    window.location.href="/auth/login";
+}
+
+
+document.getElementById("chatForm").addEventListener("submit", async function(e){
+
+    e.preventDefault();
+
+    const token = getCookie("access_token");
+
+    const message = document.getElementById("message").value;
+
+    if(message.trim() === ""){
+        return;
+    }
+
+    const payload = {
+        message: message
+    };
+
+    if (conversation_id !== null) {
+        payload.conversation_id = conversation_id;
+    }
+
+    const response = await fetch("/chat", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + token
+        },
+        body: JSON.stringify(payload)
+    });
+
+    const data = await response.json();
+
+    if(response.ok){
+
+        conversation_id = data.conversation_id;
+
+        loadConversations();
+
+        document.getElementById("messages").innerHTML +=
+            "<p><b>You:</b> " + data.user_message + "</p>";
+
+        document.getElementById("messages").innerHTML +=
+            "<p><b>Assistant:</b> " + data.assistant_message + "</p>";
+
+        document.getElementById("message").value = "";
+
+    }
+    else{
+
+        alert(data.detail);
+
+    }
+
+});
+
+async function selectConversation(id){
+
+    conversation_id = id;
+
+    const token = getCookie("access_token");
+
+    const response = await fetch("/conversations/" + id,{
+        headers:{
+            "Authorization":"Bearer " + token
+        }
+    });
+
+    if(!response.ok){
+        alert("Unable to load conversation");
+        return;
+    }
+
+    const conversation = await response.json();
+
+    const messagesDiv = document.getElementById("messages");
+
+    messagesDiv.innerHTML = "";
+
+    conversation.messages.forEach(function(message){
+
+        if(message.role === "user"){
+
+            messagesDiv.innerHTML +=
+                "<p><b>You:</b> " + message.content + "</p>";
+
+        }else{
+
+            messagesDiv.innerHTML +=
+                "<p><b>Assistant:</b> " + message.content + "</p>";
+
+        }
+
+    });
+
+}
+
+
+async function loadConversations(){
+
+    const token = getCookie("access_token");
+
+    const response = await fetch("/conversations",{
+        headers:{
+            "Authorization":"Bearer " + token
+        }
+    });
+
+    if(!response.ok){
+        return;
+    }
+
+    const conversations = await response.json();
+
+    const div = document.getElementById("conversations");
+
+    div.innerHTML = "";
+
+    conversations.forEach(function(conversation){
+
+        div.innerHTML += `
+            <p>
+                <a href="#" onclick="selectConversation(${conversation.id})">
+                    ${conversation.title}
+                </a>
+            </p>
+        `;
+
+    });
+
+}
+
+loadConversations();
+
+
+</script>
+
+</body>
+
+</html>

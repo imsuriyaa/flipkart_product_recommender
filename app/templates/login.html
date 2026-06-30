@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Login</title>
+</head>
+
+<body>
+
+<h2>Login</h2>
+
+<form id="loginForm">
+
+    <label>Username</label><br>
+    <input type="text" id="username"><br><br>
+
+    <label>Password</label><br>
+    <input type="password" id="password"><br><br>
+
+    <button type="submit">Login</button>
+
+</form>
+
+<p id="message"></p>
+
+<p>
+    <a href="/auth/register">Register</a>
+</p>
+
+<script>
+
+document.getElementById("loginForm").addEventListener("submit", async function(e){
+
+    e.preventDefault();
+
+    const formData = new URLSearchParams();
+
+    formData.append(
+        "username",
+        document.getElementById("username").value
+    );
+
+    formData.append(
+        "password",
+        document.getElementById("password").value
+    );
+
+    const response = await fetch("/auth/token",{
+        method:"POST",
+        body:formData
+    });
+
+    const data = await response.json();
+
+    if(response.ok){
+
+        document.cookie =
+            `access_token=${data.access_token}; path=/`;
+
+        window.location.href="/chat";
+
+    }
+    else{
+        document.getElementById("message").innerText =
+            data.detail;
+    }
+
+});
+
+</script>
+
+</body>
+</html>

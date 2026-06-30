@@ -25,6 +25,13 @@ db_dependency = Annotated[Session, Depends(get_db)]
 user_dependency = Annotated[dict, Depends(get_current_user)]
 
 
+APP_DIR = Path(__file__).resolve().parent.parent
+
+templates = Jinja2Templates(
+    directory=APP_DIR / "templates"
+)
+
+
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1)
     conversation_id: int | None = None
@@ -109,6 +116,21 @@ def _load_history(
         for msg in messages
     ]
     return history
+
+# Pages
+
+@router.get("")
+def chat_page(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="chat.html",
+        context={
+            "request": request,
+        },
+    )
+
+
+# Endpoints
 
 
 @router.post("", response_model=ChatResponse)

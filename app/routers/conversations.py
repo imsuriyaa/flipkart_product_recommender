@@ -73,6 +73,9 @@ def _conversation_response(conversation: Conversation) -> ConversationResponse:
     )
 
 
+
+
+
 @router.post("", response_model=ConversationResponse, status_code=status.HTTP_201_CREATED)
 def create_conversation(
     request: ConversationCreate,
@@ -120,3 +123,6 @@ def get_conversation(
         **_conversation_response(conversation).dict(),
         messages=[_message_response(message) for message in messages]
     )
+
+
+

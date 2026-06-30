@@ -12,7 +12,7 @@ from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from jose import jwt, JWTError
 from dotenv import load_dotenv
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, JSONResponse
 
 try:
     from database import get_db
@@ -41,7 +41,41 @@ templates = Jinja2Templates(directory=APP_DIR / "templates")
 
 # Pages
 
+from fastapi.responses import RedirectResponse
 
+@router.get("/login")
+async def login_page(request: Request):
+
+    token = request.cookies.get("access_token")
+
+    if token:
+        # await get_current_user(token)
+        return RedirectResponse(
+            url="/chat",
+            status_code=status.HTTP_302_FOUND
+        )
+
+    return templates.TemplateResponse(
+        request=request,
+        name="login.html",
+        context={"request": request},
+    )
+
+@router.get("/register")
+async def register_page(request: Request):
+
+    token = request.cookies.get("access_token")
+
+    token = request.cookies.get("access_token")
+
+    if token:
+        return RedirectResponse(url="/chat", status_code=status.HTTP_302_FOUND)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="register.html",
+        context={"request": request},
+    )
 
 # EndPoints
 
@@ -112,19 +146,50 @@ def create_user(db: db_dependency, user: CreateUserRequest):
     return {"message": "User created successfully"}
 
 
-@router.post('/token', response_model=TokenResponse)
-def get_access_token(db: db_dependency, form_data: Annotated[OAuth2PasswordRequestForm, Depends()]):
+# @router.post('/token', response_model=TokenResponse)
+# def get_access_token(db: db_dependency, form_data: Annotated[OAuth2PasswordRequestForm, Depends()]):
     
+#     user = authenticate_user(form_data.username, form_data.password, db)
+    
+#     if not user:
+#         raise HTTPException(
+#             status_code=status.HTTP_401_UNAUTHORIZED,
+#             detail="Could not validate credentials"
+#         )
+    
+#     token = create_access_token(user.username, user.id, timedelta(minutes=20))
+
+#     return {"access_token": token, "token_type": "bearer"}
+
+
+@router.post("/token")
+def get_access_token(
+    db: db_dependency,
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()]
+):
     user = authenticate_user(form_data.username, form_data.password, db)
-    
+
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials"
+            detail="Invalid username or password"
         )
-    
-    token = create_access_token(user.username, user.id, timedelta(minutes=20))
 
-    return {"access_token": token, "token_type": "bearer"}
+    token = create_access_token(
+        user.username,
+        user.id,
+        timedelta(minutes=20)
+    )
 
+    response = JSONResponse(
+        content={"message": "Login successful"}
+    )
 
+    response.set_cookie(
+        key="access_token",
+        value=token,
+        httponly=True,
+        samesite="lax"
+    )
+
+    return response
